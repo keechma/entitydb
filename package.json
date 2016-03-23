@@ -1,0 +1,12 @@
+{
+  "name": "keechma",
+  "version": "0.0.1",
+  "description": "Frontend micro framework for ClojureScript and Reagent",
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "karma": "^0.13.16",
+    "karma-chrome-launcher": "^0.2.2",
+    "karma-cljs-test": "^0.1.0"
+  }
+}
