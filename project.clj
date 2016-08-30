@@ -17,6 +17,10 @@
             [lein-codox "0.9.3"]]
 
   :source-paths ["src"]
+  
+  :codox {:language :clojurescript
+          :metadata {:doc/format :markdown}
+          :namespaces [entitydb.core]}
 
   :clean-targets ^{:protect false} ["resources/public/js/compiled" "target"]
 
