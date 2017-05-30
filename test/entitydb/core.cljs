@@ -491,3 +491,35 @@
   (let [insert-item-fn (:insert-item dbal)
         db (insert-item-fn {} :notes {:id 1 :title "Note title"})]
     (is (= (get-in db [:notes :store 1 :title]) "Note title"))))
+
+(deftest inserting-item-with-relations-should-strip-them
+  (let [schema {:user {:relations {:notes [:many :note]}
+                       :id :id}
+                :note {:id :id}}
+        user {:id 1 :notes [{:id 1} {:id 2}]}
+        insert-named-item (partial edb/insert-named-item schema)
+        insert-collection (partial edb/insert-collection schema)
+        get-named-item (partial edb/get-named-item schema)
+        db {}
+        db-after-insert (insert-named-item db :user :current user)
+        user-from-db (get-named-item db-after-insert :user :current)]
+    (is (= {:user {:c-one {:current 1}
+                   :c-many {:list [1]}
+                   :store {1 {:id 1}}}
+            :note {:store {1 {:id 1} 2 {:id 2}}
+                   :c-many {[:user 1 :notes] [1 2]}}}
+           (insert-collection db-after-insert :user :list [user-from-db])))
+    (is (= {:user {:c-one {:current 1}
+                   :store {1 {:id 1}}}
+            :note {:store {1 {:id 1} 2 {:id 2}}
+                   :c-many {[:user 1 :notes] [1 2]}}}
+           (insert-named-item db-after-insert :user :current user-from-db)
+           db-after-insert))))
+
+(deftest getting-nil-item-with-relations-should-return-nil
+  (let [schema {:user {:relations {:notes [:many :note]}
+                       :id :id}
+                :note {:id :id}}
+        get-named-item (partial edb/get-named-item schema)
+        db {} ]
+    (is (nil? (get-named-item db :user :current)))))

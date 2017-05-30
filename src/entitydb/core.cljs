@@ -204,9 +204,11 @@
                      insert-collection-fn (if (= relation-type :one)
                                             insert-named-item
                                             insert-collection)]
-                 (if (and (contains? item relation-kw) (nil? relation-data))
-                   (remove-collection-or-named-item db related-entity-kw (relation-type remove-collection-type-map) collection-key)
-                   (insert-collection-fn schema db related-entity-kw collection-key relation-data))))
+                 (if (fn? relation-data)
+                   db
+                   (if (and (contains? item relation-kw) (nil? relation-data))
+                     (remove-collection-or-named-item db related-entity-kw (relation-type remove-collection-type-map) collection-key)
+                     (insert-collection-fn schema db related-entity-kw collection-key relation-data)))))
              db relations))
 
 (defn insert-meta
@@ -370,9 +372,11 @@
   [schema db entity-kw id]
   (let [relations (relations/get-relations schema entity-kw)
         item (get-in db [entity-kw :store id])]
-    (-> item
-        (with-meta (get-item-meta schema db entity-kw id))
-        ((partial reduce-kv (get-related-items-fn schema db entity-kw id)) relations))))
+    (if (nil? item)
+      nil
+      (-> item
+          (with-meta (get-item-meta schema db entity-kw id))
+          ((partial reduce-kv (get-related-items-fn schema db entity-kw id)) relations)))))
 
 (defn get-collection
   "Gets collection by it's key. Internally collections store only entity ids, but
