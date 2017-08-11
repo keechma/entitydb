@@ -189,8 +189,8 @@
                                        :c-one {[:notes 1 :user] 1}
                                        :c-many {}}}
         expected-db-with-nil-user {:notes {:store {1 {:id 1}}
-                                       :c-one {}
-                                       :c-many {}}
+                                           :c-one {}
+                                           :c-many {}}
                                    :users {:store {1 {:id 1}}
                                            :c-one {}
                                            :c-many {}}}]
@@ -201,8 +201,8 @@
   (let [schema {:users {}
                 :notes {:relations {:user [:one :users]}}}
         db (-> {}
-                   (util/add-empty-layout :notes)
-                   (util/add-empty-layout :users))
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :users))
         note {:id 1 :user {:id 1}}
         note-with-no-user {:id 1 :title "Foo"}
         db-with-user (edb/insert-item schema db :notes note)
@@ -325,9 +325,9 @@
 (deftest remove-collection []
   (let [db {:notes {:store {1 {:id 1}}
                     :c-one {:current 1
-                                      :pinned 2}
+                            :pinned 2}
                     :c-many {:latest [1 2]
-                                       :starred [2 3]}}}
+                             :starred [2 3]}}}
         expected-db {:notes {:store {1 {:id 1}}
                              :c-one {:pinned 2}
                              :c-many {:starred [2 3]}}}]
@@ -335,6 +335,34 @@
            (-> db
                (edb/remove-named-item :notes :current)
                (edb/remove-collection :notes :latest))))))
+
+(deftest empty-collection []
+  (let [db {:notes {:store {1 {:id 1} 2 {:id 2} 3 {:id 3}}
+                    :c-one {}
+                    :c-many {:latest [1 2]
+                             :starred [2 3]
+                             :test [1]}}
+            :__meta-store__ {:c-one {}
+                             :c-many {}
+                             :store {[:notes :latest] {:foo :bar}
+                                     [:notes :starred] {:bar :baz}
+                                     [:notes :test] {:baz :qux}}}}
+        expected-db {:notes
+                     {:c-one {}
+                      :store {1 {:id 1} 2 {:id 2} 3 {:id 3}}
+                      :c-many {:starred []
+                               :latest []
+                               :test []}}
+                     :__meta-store__
+                     {:c-one {}
+                      :store {[:notes :latest] {:foo :bar}
+                              [:notes :test] {:baz :qux :foo :bar}}
+                      :c-many {}}}]
+    (is (= expected-db
+           (-> db
+               (edb/empty-collection :notes :test {:foo :bar})
+               (edb/empty-collection :notes :starred nil)
+               (edb/empty-collection :notes :latest))))))
 
 (deftest item-meta []
   (let [item-meta {:status :loaded}

@@ -327,6 +327,39 @@
   [db entity-kw collection-key]
   (remove-collection-or-named-item db entity-kw :c-many collection-key))
 
+(defn empty-collection
+  "Empties a collection, but leaves the meta intact. If the new meta is provided it will
+  be merged into the current meta.  Entities referenced from the collection will still be stored in
+  the internal store, but won't be available through the collection API.
+
+  ```clojure
+  (def entity-db-v1 {})
+  (def schema {:foos {:id :id}})
+
+  (def foo-entity {:id 1 :name \"bar\"})
+
+  (def entity-db-v2 (insert-collection schema entity-db-v1 :foos :list [foo-entity]))
+  
+  (get-collection schema entity-db-v2 :foos :list)
+  ;; Returns `[{:id 1 :name \"bar\"}]`
+
+  (def entity-db-v3 (empty-collection schema entity-db-v2 :foos :list))
+
+  (get-collection schema entity-db-v2 :foos :list)
+  ;; Returns `[]`
+
+  (get-item-by-id schema entity-db-v2 :foos 1)
+  ;; Returns `{:id 1 :name \"bar\"}`
+  ```
+  "
+ 
+  ([db entity-kw collection-key]
+   (empty-collection db entity-kw collection-key {}))
+  ([db entity-kw collection-key meta]
+   (-> db
+       (assoc-in [entity-kw :c-many collection-key] [])
+       (insert-meta entity-kw collection-key meta))))
+
 (defn remove-meta
   "Removes any meta data stored on the entity or collection"
   [db entity-kw id]
