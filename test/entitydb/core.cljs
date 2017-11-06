@@ -551,3 +551,81 @@
         get-named-item (partial edb/get-named-item schema)
         db {} ]
     (is (nil? (get-named-item db :user :current)))))
+
+
+#_(def schema {:notes {:id :id
+                       :middleware {:set [(fn [item] item)]}
+                       :relations {:user [:one :users]
+                                   :links [:many :links]}
+                       :schema {}}
+               :links {:id :id}
+               :users {:id :id}})
+
+(deftest get-relation-path
+  (is (= (edb/get-relation-path schema :notes :user {:id 1})
+         [:notes 1 :user]))
+  (is (= (edb/get-relation-path schema :notes :links {:id 1})
+         [:notes 1 :links])))
+
+
+
+
+(deftest manipulating-relation-many []
+  (let [db (-> {}
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :links))
+        note {:id 1 :title "Note title"
+              :links [{:id 1 :url "http://google.com"}
+                      {:id 2 :url "http://bing.com"}]}
+        db-with-items (edb/insert-item schema db :notes note)
+        expected-db {:notes {:store {1 {:id 1 :title "Note title"}}
+                             :c-one {}
+                             :c-many {}}
+                     :links {:store {1 {:id 1 :url "http://google.com"}
+                                     2 {:id 2 :url "http://bing.com"}}
+                             :c-one {}
+                             :c-many {[:notes 1 :links] [1 2]}}}
+        expected-db-after-append {:notes {:store {1 {:id 1 :title "Note title"}}
+                                          :c-one {}
+                                          :c-many {}}
+                                  :links {:store {1 {:id 1 :url "http://google.com"}
+                                                  2 {:id 2 :url "http://bing.com"}
+                                                  3 {:id 3 :url "http://altavista.com"}}
+                                          :c-one {}
+                                          :c-many {[:notes 1 :links] [1 2 3]}}}
+        expected-db-after-prepend {:notes {:store {1 {:id 1 :title "Note title"}}
+                                           :c-one {}
+                                           :c-many {}}
+                                   :links {:store {1 {:id 1 :url "http://google.com"}
+                                                   2 {:id 2 :url "http://bing.com"}
+                                                   4 {:id 4 :url "http://lycos.com" }}
+                                           :c-one {}
+                                           :c-many {[:notes 1 :links] [4 1 2]}}}
+        expected-db-after-remove {:notes {:store {1 {:id 1 :title "Note title"}}
+                                          :c-one {}
+                                          :c-many {}}
+                                  :links {:store {1 {:id 1 :url "http://google.com"}
+                                                  2 {:id 2 :url "http://bing.com"}
+                                                  }
+                                          :c-one {}
+                                          :c-many {}}}
+        expected-db-after-manual-insert {:notes {:store {1 {:id 1 :title "Note title"}}
+                                                 :c-one {}
+                                                 :c-many {}}
+                                         :links {:store {1 {:id 1 :url "http://google.com"}
+                                                         2 {:id 2 :url "http://bing.com"}
+                                                         4 {:id 4 :url "http://lycos.com" }}
+                                                 :c-one {}
+                                                 :c-many {[:notes 1 :links] [4]}}}]
+    (is (= db-with-items expected-db))
+    (is (= (edb/get-item-by-id schema db-with-items :links 1) {:id 1 :url "http://google.com"}))
+    (is (= expected-db-after-append
+           (edb/append-related-collection schema db-with-items :notes :links {:id 1}
+                                          [{:id 3 :url "http://altavista.com"}])))
+    (is (= expected-db-after-prepend
+           (edb/prepend-related-collection schema db-with-items :notes :links {:id 1}
+                                           [{:id 4 :url "http://lycos.com"}])))
+    (is (= expected-db-after-remove
+           (edb/remove-related-collection schema db-with-items :notes :links {:id 1})))
+    (is (= expected-db-after-manual-insert
+           (edb/insert-related-collection schema db-with-items :notes :links {:id 1} [{:id 4 :url "http://lycos.com"}])))))

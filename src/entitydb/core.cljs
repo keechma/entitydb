@@ -16,6 +16,8 @@
 
 (def ^:private meta-store :__meta-store__)
 
+(def relations :entitydb/relations)
+
 (defn insert-item
   "Inserts an item into the EntityDB collection.
 
@@ -33,7 +35,7 @@
   "
   ([schema db entity-kw item] (insert-item schema db entity-kw item nil))
   ([schema db entity-kw item meta]
-   (let [id (util/get-item-id schema entity-kw item) 
+   (let [id (util/get-item-id schema entity-kw item)
          relations (relations/get-relations schema entity-kw)
          db-with-inserted-relations (insert-related schema db relations entity-kw id item)
          processed-item (relations/remove-related-from-item
@@ -477,6 +479,27 @@
         entity-kws-without-meta (filterv (fn [k] (not (= k meta-store))) entity-kws)]
     (reduce vacuum-entity-db db entity-kws-without-meta)))
 
+(defn get-relation-path [schema parent-entity-kw attr parent]
+  [parent-entity-kw (util/get-item-id schema parent-entity-kw parent) attr])
+
+(defn wrap-collection-fn-with-relation-path [relation-fn include-schema?]
+  (fn [schema db parent-entity-kw attr parent & args]
+    (let [relation (get-in schema [parent-entity-kw :relations attr])
+          relation-collection? (= :many (first relation))
+          relation-kw (last relation)]
+      (when (not relation-collection?)
+        (throw (ex-info (str attr " is not a collection relation") {})))
+      (let [path (get-relation-path schema parent-entity-kw attr parent)
+            default-args (if include-schema? [schema db relation-kw path] [db relation-kw path])]
+        (apply relation-fn (into default-args args))))))
+
+
+(def insert-related-collection (wrap-collection-fn-with-relation-path insert-collection true))
+(def remove-related-collection (wrap-collection-fn-with-relation-path remove-collection false))
+(def prepend-related-collection (wrap-collection-fn-with-relation-path prepend-collection true))
+(def append-related-collection (wrap-collection-fn-with-relation-path append-collection true))
+
+
 (defn make-dbal
   "Returns a map with all public functions. These functions will have `schema`
   partially applied to them so you don't have to pass the schema around."
@@ -484,12 +507,16 @@
   {:insert-item (partial (util/ensure-layout insert-item) schema)
    :insert-named-item (partial (util/ensure-layout insert-named-item) schema)
    :insert-collection (partial (util/ensure-layout insert-collection) schema)
+   :insert-related-collection (partial insert-related-collection schema)
    :append-collection (partial (util/ensure-layout append-collection) schema)
+   :append-related-collection (partial append-related-collection schema)
    :prepend-collection (partial (util/ensure-layout prepend-collection) schema)
+   :prepend-related-collection (partial prepend-related-collection schema)
    :insert-meta insert-meta
    :remove-item (partial (util/ensure-layout remove-item) schema)
    :remove-named-item remove-named-item 
-   :remove-collection remove-collection 
+   :remove-collection remove-collection
+   :remove-related-collection (partial remove-related-collection schema)
    :remove-meta remove-meta
    :get-item-by-id (partial get-item-by-id schema)
    :get-named-item (partial get-named-item schema)
