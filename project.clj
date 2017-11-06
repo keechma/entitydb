@@ -1,4 +1,4 @@
-(defproject keechma/entitydb "0.1.2"
+(defproject keechma/entitydb "0.1.3"
   :description "EntityDB - In memory entity store for ClojureScript applications."
   :url "http://keechma.com/"
   :license {:name "MIT"}
