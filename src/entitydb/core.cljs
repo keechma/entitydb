@@ -13,6 +13,7 @@
 (declare remove-meta)
 (declare get-collection-meta)
 (declare remove-collection-or-named-item)
+(declare remove-collection)
 
 (def ^:private meta-store :__meta-store__)
 
@@ -113,7 +114,7 @@
    (insert-collection schema db entity-kw collection-key data nil))
   ([schema db entity-kw collection-key data meta]
    (if (and (empty? data) (nil? meta))
-     db
+     (remove-collection db entity-kw collection-key)
      (let [id-fn (util/get-id-fn schema entity-kw)
            ids (into [] (map id-fn data))]
        (-> db
@@ -199,19 +200,27 @@
      (assoc-in db-with-items c-path (remove nil? (flatten [new-ids current-ids]))))))
 
 (defn ^:private insert-related [schema db relations entity-kw id item]
-  (reduce-kv (fn [db relation-kw [relation-type related-entity-kw]]
-               (let [collection-key (relations/get-related-collection-key entity-kw id relation-kw)
-                     relation-data (relation-kw item)
-                     remove-collection-type-map {:one :c-one :many :c-many}
-                     insert-collection-fn (if (= relation-type :one)
-                                            insert-named-item
-                                            insert-collection)]
-                 (if (fn? relation-data)
-                   db
-                   (if (and (contains? item relation-kw) (nil? relation-data))
-                     (remove-collection-or-named-item db related-entity-kw (relation-type remove-collection-type-map) collection-key)
-                     (insert-collection-fn schema db related-entity-kw collection-key relation-data)))))
-             db relations))
+  (reduce-kv 
+   (fn [db relation-kw [relation-type related-entity-kw]]
+     (let [collection-key (relations/get-related-collection-key entity-kw id relation-kw)
+           relation-data (relation-kw item)
+           remove-collection-type-map {:one :c-one :many :c-many}
+           insert-collection-fn (if (= relation-type :one)
+                                  insert-named-item
+                                  insert-collection)]
+       (cond
+         (fn? relation-data)
+         db
+
+         (not (contains? item relation-kw))
+         db
+
+         (and (contains? item relation-kw) (nil? (seq relation-data)))
+         (remove-collection-or-named-item db related-entity-kw (remove-collection-type-map relation-type) collection-key)
+
+         :else
+         (insert-collection-fn schema db related-entity-kw collection-key relation-data))))
+   db relations))
 
 (defn insert-meta
   "Inserts meta data for an entity or collection into the store."
@@ -354,7 +363,7 @@
   ;; Returns `{:id 1 :name \"bar\"}`
   ```
   "
- 
+  
   ([db entity-kw collection-key]
    (empty-collection db entity-kw collection-key {}))
   ([db entity-kw collection-key meta]

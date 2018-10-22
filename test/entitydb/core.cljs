@@ -629,3 +629,45 @@
            (edb/remove-related-collection schema db-with-items :notes :links {:id 1})))
     (is (= expected-db-after-manual-insert
            (edb/insert-related-collection schema db-with-items :notes :links {:id 1} [{:id 4 :url "http://lycos.com"}])))))
+
+
+(deftest inserting-empty-collection-will-remove-existing-data
+  (let [db (-> {}
+               (util/add-empty-layout :notes))
+        db-with-items (edb/insert-collection schema db :notes :list [{:id 1} {:id 2}])
+        expected-db {:notes {:store {1 {:id 1} 2 {:id 2}}
+                             :c-many {:list [1 2]}
+                             :c-one {}}}
+        expected-db-after-inserting-empty {:notes {:store {1 {:id 1} 2 {:id 2}}
+                                                   :c-many {}
+                                                   :c-one {}}}]
+    (is (= db-with-items expected-db))
+    (is (= (edb/insert-collection schema db-with-items :notes :list [])
+           expected-db-after-inserting-empty))))
+
+(deftest inserting-empty-collection-to-relation-will-remove-existing-data
+  (let [db (-> {}
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :links))
+        note {:id 1 :title "Note title"
+              :links [{:id 1 :url "http://google.com"}
+                      {:id 2 :url "http://bing.com"}]}
+        db-with-items (edb/insert-item schema db :notes note)
+        expected-db {:notes {:store {1 {:id 1 :title "Note title"}}
+                             :c-one {}
+                             :c-many {}}
+                     :links {:store {1 {:id 1 :url "http://google.com"}
+                                     2 {:id 2 :url "http://bing.com"}}
+                             :c-one {}
+                             :c-many {[:notes 1 :links] [1 2]}}}
+        expected-db-after-inserting-empty-relation
+        {:notes {:store {1 {:id 1 :title "Note title"}}
+                 :c-one {}
+                 :c-many {}}
+         :links {:store {1 {:id 1 :url "http://google.com"}
+                         2 {:id 2 :url "http://bing.com"}}
+                 :c-one {}
+                 :c-many {}}}]
+    (is (= db-with-items expected-db))
+    (is (= (edb/insert-item schema db-with-items :notes {:id 1 :links []})
+           expected-db-after-inserting-empty-relation))))
