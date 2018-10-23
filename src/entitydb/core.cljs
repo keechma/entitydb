@@ -120,8 +120,9 @@
        (-> db
            (assoc-in [entity-kw :c-many collection-key] ids)
            (insert-meta entity-kw collection-key meta)
-           ((partial reduce (fn [db item]
-                              (insert-item schema db entity-kw item))) data))))))
+           (as-> db (reduce (fn [db item]
+                              (insert-item schema db entity-kw item))
+                            db data)))))))
 
 (defn append-collection
   "Appends items to an existing collection.
@@ -405,22 +406,39 @@
 (defn ^:private get-related-items-fn [schema db entity-kw id]
   (fn [item relation-kw [relation-type related-entity-kw]]
     (let [collection-key (relations/get-related-collection-key entity-kw id relation-kw)
-          get-collection-fn (if (= relation-type :one)
-                              get-named-item
-                              get-collection)
-          data-fn (partial get-collection-fn schema db related-entity-kw collection-key) ]
+          get-related-fn (if (= relation-type :one)
+                           get-named-item
+                           get-collection)
+          data-fn (partial get-related-fn schema db related-entity-kw collection-key)]
       (assoc item relation-kw data-fn))))
+
+(defn resolve-relations [item pull-relations]
+  (if (seq pull-relations)
+    (reduce
+     (fn [acc r]
+       (let [relation (if (vector? r) r [r])
+             [attr & attr-pull-relations] relation
+             attr-getter (get acc attr)]
+         (if-let [resolved (when (fn? attr-getter) (attr-getter))]
+           (if (vector? resolved)
+             (assoc acc attr (map #(resolve-relations % attr-pull-relations) resolved))
+             (assoc acc attr (resolve-relations resolved attr-pull-relations)))
+           acc)))
+     item pull-relations)
+    item))
 
 (defn get-item-by-id
   "Gets an entity from the store by the id"
-  [schema db entity-kw id]
-  (let [relations (relations/get-relations schema entity-kw)
-        item (get-in db [entity-kw :store id])]
-    (if (nil? item)
-      nil
-      (-> item
-          (with-meta (get-item-meta schema db entity-kw id))
-          ((partial reduce-kv (get-related-items-fn schema db entity-kw id)) relations)))))
+  ([schema db entity-kw id] (get-item-by-id schema db entity-kw id []))
+  ([schema db entity-kw id pull-relations]
+   (let [relations (relations/get-relations schema entity-kw)
+         item (get-in db [entity-kw :store id])]
+     (if (nil? item)
+       nil
+       (-> item
+           (with-meta (get-item-meta schema db entity-kw id))
+           (as-> item (reduce-kv (get-related-items-fn schema db entity-kw id) item relations))
+           (resolve-relations pull-relations))))))
 
 (defn get-collection
   "Gets collection by it's key. Internally collections store only entity ids, but
@@ -445,20 +463,24 @@
   ;; [{:id 1 :name \"foo\"} {:id 2 :name \"bar\"}]
   ```
   "
-  [schema db entity-kw collection-key]
-  (let [ids (get-in db [entity-kw :c-many collection-key])]
-    (with-meta
-      (into [] (map (partial get-item-by-id schema db entity-kw) ids))
-      (get-collection-meta schema db entity-kw collection-key))))
+  ([schema db entity-kw collection-key]
+   (get-collection schema db entity-kw collection-key []))
+  ([schema db entity-kw collection-key pull-relations]
+   (let [ids (get-in db [entity-kw :c-many collection-key])]
+     (with-meta
+       (into [] (map #(get-item-by-id schema db entity-kw % pull-relations) ids))
+       (get-collection-meta schema db entity-kw collection-key)))))
 
 (defn get-named-item
   "Gets an entity referenced from the named item slot. Internally named slots store
   only entity ids but this function will return an entity based on the id."
   ([schema db entity-kw collection-key]
-   (get-named-item schema db entity-kw collection-key true))
+   (get-named-item schema db entity-kw collection-key false []))
   ([schema db entity-kw collection-key include-meta]
+   (get-named-item schema db entity-kw collection-key include-meta []))
+  ([schema db entity-kw collection-key include-meta pull-relations]
    (let [id (get-in db [entity-kw :c-one collection-key])
-         item (get-item-by-id schema db entity-kw id)]
+         item (get-item-by-id schema db entity-kw id pull-relations)]
      (if include-meta
        (with-meta
          item

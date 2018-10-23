@@ -671,3 +671,81 @@
     (is (= db-with-items expected-db))
     (is (= (edb/insert-item schema db-with-items :notes {:id 1 :links []})
            expected-db-after-inserting-empty-relation))))
+
+(deftest resolve-relations
+  (let [db (-> {}
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :links)
+               (util/add-empty-layout :users))
+        note {:id 1 
+              :title "Note title"
+              :links [{:id 1}]
+              :user {:id 1}}
+        user {:id 1 :username "Retro"}
+        link {:id 1 :url "http://google.com" :user {:id 1}}
+        schema (-> schema
+                   (assoc-in [:notes :relations :user] [:one :users])
+                   (assoc :links {:relations {:user [:one :users]}}))
+        insert-item (partial edb/insert-item schema)
+        db-with-items (-> db
+                          (insert-item :notes note)
+                          (insert-item :users user)
+                          (insert-item :links link))]
+    (is (= {:id 1
+            :title "Note title"
+            :links [{:id 1 :url "http://google.com" :user {:id 1 :username "Retro"}}]
+            :user {:id 1 :username "Retro"}}
+           (edb/get-item-by-id schema db-with-items :notes 1 [:user [:links :user]])))))
+
+(deftest resolve-relations-for-named-item
+  (let [db (-> {}
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :links)
+               (util/add-empty-layout :users))
+        note {:id 1 
+              :title "Note title"
+              :links [{:id 1}]
+              :user {:id 1}}
+        user {:id 1 :username "Retro"}
+        link {:id 1 :url "http://google.com" :user {:id 1}}
+        schema (-> schema
+                   (assoc-in [:notes :relations :user] [:one :users])
+                   (assoc :links {:relations {:user [:one :users]}}))
+        insert-item (partial edb/insert-item schema)
+        insert-named-item (partial edb/insert-named-item schema)
+        db-with-items (-> db
+                          (insert-named-item :notes :current note)
+                          (insert-item :users user)
+                          (insert-item :links link))]
+    (is (= {:id 1
+            :title "Note title"
+            :links [{:id 1 :url "http://google.com" :user {:id 1 :username "Retro"}}]
+            :user {:id 1 :username "Retro"}}
+           (edb/get-named-item schema db-with-items :notes :current false [:user [:links :user]])))))
+
+
+(deftest resolve-relations-for-collection
+  (let [db (-> {}
+               (util/add-empty-layout :notes)
+               (util/add-empty-layout :links)
+               (util/add-empty-layout :users))
+        note {:id 1 
+              :title "Note title"
+              :links [{:id 1}]
+              :user {:id 1}}
+        user {:id 1 :username "Retro"}
+        link {:id 1 :url "http://google.com" :user {:id 1}}
+        schema (-> schema
+                   (assoc-in [:notes :relations :user] [:one :users])
+                   (assoc :links {:relations {:user [:one :users]}}))
+        insert-item (partial edb/insert-item schema)
+        insert-collection (partial edb/insert-collection schema)
+        db-with-items (-> db
+                          (insert-collection :notes :list [note])
+                          (insert-item :users user)
+                          (insert-item :links link))]
+    (is (= [{:id 1
+              :title "Note title"
+              :links [{:id 1 :url "http://google.com" :user {:id 1 :username "Retro"}}]
+              :user {:id 1 :username "Retro"}}]
+           (edb/get-collection schema db-with-items :notes :list [:user [:links :user]])))))
