@@ -18,7 +18,7 @@
 (defn call-middleware [get-or-set schema entity-kw item]
   (let [middlewares (or (get-in schema [entity-kw :middleware get-or-set])
                         [passthrough-item])
-        pipeline (apply comp middlewares)]
+        pipeline (apply comp (reverse middlewares))]
     (pipeline item)))
 
 
