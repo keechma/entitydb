@@ -1,5 +1,7 @@
 # EntityDB
 
+This project is **DEPRECATED**. Last deployed version is [keechma/entitydb "0.1.6"]. New EntityDB is available at https://github.com/keechma/keechma-entitydb
+
 EntityDB is a library that handles storage of any kind of entities in your application. Entity is anything that is "identifiable". Usually the id attribute is used, but you can use anything that makes sense for your application.
 
 ## Documentation
